@@ -41,4 +41,11 @@ public class AccountController {
         errorResponse.setCode("duplicated.username.exception");
         return errorResponse;
     }
+
+    public ErrorResponse handleAccountNotFoundException(AccountNotFoundException e){
+        ErrorResponse errorResponse = new ErrorResponse();
+        errorResponse.setMessage("[" + e.getId() + "]에 해당하는 계정이 없습니다.");
+        errorResponse.setCode("account.not.found.exception");
+        return errorResponse;
+    }
 }
