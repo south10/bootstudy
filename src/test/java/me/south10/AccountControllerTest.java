@@ -1,16 +1,19 @@
 package me.south10;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
-import me.south10.accounts.AccountDto;
-import me.south10.accounts.AccountService;
+import static org.hamcrest.CoreMatchers.is;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.SpringApplicationConfiguration;
 import org.springframework.http.MediaType;
+import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
@@ -19,11 +22,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import lombok.extern.slf4j.Slf4j;
+import me.south10.accounts.Account;
+import me.south10.accounts.AccountDto;
+import me.south10.accounts.AccountService;
 
 /**
  * Created by south10 on 2016-05-26.
@@ -43,12 +47,14 @@ public class AccountControllerTest {
     @Autowired
     AccountService accountService;
 
+    @Autowired
+    private FilterChainProxy springSecurityFilterChain;
+
     MockMvc mockMvc;
 
     @Before
     public void setUp() throws Exception {
-        // TODO: 2016-05-26 추후 security 필터 추가 예정
-        mockMvc = new MockMvcBuilders().webAppContextSetup(wac).build();
+        mockMvc = new MockMvcBuilders().webAppContextSetup(wac).addFilter(springSecurityFilterChain).build();
     }
 
     @Test
@@ -70,6 +76,79 @@ public class AccountControllerTest {
         result.andExpect(status().isBadRequest());
         result.andExpect(jsonPath("$.code", is("duplicated.username.exception")));
     }
+
+    @Test
+    public void createAccount_BadRequest() throws Exception {
+        AccountDto.Create createDto = new AccountDto.Create();
+        createDto.setUsername(" ");
+        createDto.setPassword("1234");
+
+        ResultActions result = mockMvc.perform(post("/accounts")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(createDto)));
+
+        result.andDo(print());
+        result.andExpect(status().isBadRequest());
+        result.andExpect(jsonPath("$.code", is("bad.request")));
+    }
+
+    @Test
+    public void getAccounts() throws Exception {
+        AccountDto.Create createDto = accountCreateDto();
+        accountService.createAccount(createDto);
+
+        ResultActions result = mockMvc.perform(get("/accounts"));
+        result.andDo(print());
+        result.andExpect(status().isOk());
+    }
+
+    @Test
+    public void getAccount() throws Exception {
+        AccountDto.Create createDto = accountCreateDto();
+        Account account = accountService.createAccount(createDto);
+
+        ResultActions result = mockMvc.perform(get("/accounts/" + account.getId()));
+        result.andDo(print());
+        result.andExpect(status().isOk());
+    }
+
+    @Test
+    public void updateAccount() throws Exception {
+        AccountDto.Create createDto = accountCreateDto();
+        Account account = accountService.createAccount(createDto);
+
+        AccountDto.Update updateDto = new AccountDto.Update();
+        updateDto.setFullName("kim namyoul");
+        updateDto.setPassword("qwer");
+
+        ResultActions result = mockMvc.perform(put("/accounts/" + account.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(updateDto)));
+
+        result.andDo(print());
+        result.andExpect(status().isOk());
+        result.andExpect(jsonPath("$.fullName", is("kim namyoul")));
+    }
+
+   @Test
+    public void deleteAccount() throws Exception {
+        AccountDto.Create createDto = accountCreateDto();
+        Account account = accountService.createAccount(createDto);
+
+        ResultActions result = mockMvc.perform(delete("/accounts/12839187241")
+                .with(httpBasic(createDto.getUsername(), createDto.getPassword())));
+
+        result.andDo(print());
+        result.andExpect(status().isBadRequest());
+
+        result = mockMvc.perform(delete("/accounts/" + account.getId())
+                .with(httpBasic(createDto.getUsername(), createDto.getPassword())));
+
+        result.andDo(print());
+        result.andExpect(status().isNoContent());
+    }
+
+
 
     private AccountDto.Create accountCreateDto() {
         AccountDto.Create createDto = new AccountDto.Create();
